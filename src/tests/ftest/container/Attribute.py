@@ -1,6 +1,6 @@
 #!/usr/bin/python
 '''
-  (C) Copyright 2018Copyright 2018-2019 Intel Corporation.
+  (C) Copyright 2018-2019 Intel Corporation.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -24,22 +24,14 @@
 
 import os
 import traceback
-import sys
-import json
 import threading
 import string
 import random
-from avocado       import Test
+from apricot       import TestWithServers
 
-sys.path.append('./util')
-sys.path.append('../util')
-sys.path.append('../../../utils/py')
-sys.path.append('./../../utils/py')
-import ServerUtils
-import WriteHostFile
 from GeneralUtils import DaosTestError
 
-from daos_api import DaosContext, DaosPool, DaosContainer, DaosApiError
+from daos_api import DaosPool, DaosContainer, DaosApiError
 
 GLOB_SIGNAL = None
 GLOB_RC = -99000000
@@ -76,31 +68,18 @@ def verify_get_attr(indata, outdata):
     for attr, value in indata.iteritems():
         if value != outdata[attr]:
             raise DaosTestError("FAIL: Value does not match after get attr,"
-                             " Expected val={0} and received val = {1}"
+                                " Expected val={0} and received val = {1}"
                                 .format(value, outdata[attr]))
 
-class ContainerAttributeTest(Test):
+class ContainerAttributeTest(TestWithServers):
     """
     Tests DAOS container attribute get/set/list.
+    :avocado: recursive
     """
     def setUp(self):
-        self.pool = None
-        self.container = None
-        self.hostlist = None
+        super(ContainerAttributeTest, self).setUp()
+
         self.large_data_set = {}
-
-        with open('../../../.build_vars.json') as f:
-            build_paths = json.load(f)
-        basepath = os.path.normpath(build_paths['PREFIX']  + "/../")
-        server_group = self.params.get("server_group",
-                                       '/server/',
-                                       'daos_server')
-        self.context = DaosContext(build_paths['PREFIX'] + '/lib/')
-
-        self.hostlist = self.params.get("test_machines", '/run/hosts/*')
-        self.hostfile = WriteHostFile.WriteHostFile(self.hostlist, self.workdir)
-
-        ServerUtils.runServer(self.hostfile, server_group, basepath)
 
         self.pool = DaosPool(self.context)
         self.pool.create(self.params.get("mode", '/run/attrtests/createmode/*'),
@@ -120,7 +99,7 @@ class ContainerAttributeTest(Test):
             if self.container:
                 self.container.close()
         finally:
-            ServerUtils.stopServer(hosts=self.hostlist)
+            super(ContainerAttributeTest, self).tearDown()
 
     def create_data_set(self):
         """

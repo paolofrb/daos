@@ -1,6 +1,6 @@
 #!/usr/bin/python
 '''
-  (C) Copyright 2018 Intel Corporation.
+  (C) Copyright 2018-2019 Intel Corporation.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -23,16 +23,12 @@
 '''
 
 import os
-import time
 import traceback
-import sys
 import json
 
-from avocado       import Test
-from avocado       import main
 from avocado.utils import process
+from apricot       import Test
 
-sys.path.append('./util')
 import ServerUtils
 import CheckForPool
 import WriteHostFile
@@ -41,7 +37,7 @@ class MultipleCreatesTest(Test):
     """
     Tests DAOS pool creation, calling it repeatedly one after another
 
-    :avocado: tags=pool,poolcreate,multicreate
+    :avocado: recursive
     """
 
     # super wasteful since its doing this for every variation

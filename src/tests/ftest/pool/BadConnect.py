@@ -23,17 +23,11 @@
 '''
 
 import os
-import time
 import traceback
-import sys
 import json
 import ctypes
-from avocado import Test, main
+from apricot import Test
 
-sys.path.append('../util')
-sys.path.append('../../../utils/py')
-sys.path.append('./util')
-sys.path.append('./../../utils/py')
 
 import ServerUtils
 import WriteHostFile
@@ -170,11 +164,11 @@ class BadConnectTest(Test):
         # cleanup the pool
         finally:
             if pool is not None and pool.attached == 1:
-                    # restore values in case we trashed them during test
-                    pool.svc.rl_ranks = psvc.rl_ranks
-                    pool.svc.rl_nr = psvc.rl_nr
-                    pool.group = pgroup
-                    ctypes.memmove(pool.uuid, puuid, 16)
-                    print("pool uuid after restore {}".format(
-                        pool.get_uuid_str()))
-                    pool.destroy(1)
+                # restore values in case we trashed them during test
+                pool.svc.rl_ranks = psvc.rl_ranks
+                pool.svc.rl_nr = psvc.rl_nr
+                pool.group = pgroup
+                ctypes.memmove(pool.uuid, puuid, 16)
+                print("pool uuid after restore {}".format(
+                    pool.get_uuid_str()))
+                pool.destroy(1)

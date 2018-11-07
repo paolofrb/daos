@@ -1,6 +1,6 @@
 #!/usr/bin/python
 '''
-  (C) Copyright 2018 Intel Corporation.
+  (C) Copyright 2018-2019 Intel Corporation.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -22,12 +22,9 @@
   portions thereof marked with this legend must also reproduce the markings.
 '''
 
-import os
 import sys
 import numpy as np
 
-sys.path.append('../../../utils/py')
-sys.path.append('../../utils/py')
 from daos_io import DaosFile
 
 class DaosIOFailed(Exception):

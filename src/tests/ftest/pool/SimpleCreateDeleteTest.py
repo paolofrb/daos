@@ -24,48 +24,23 @@
 
 import os
 import traceback
-import sys
-import json
-from avocado       import Test
 
-sys.path.append('./util')
-sys.path.append('../util')
-sys.path.append('../../../utils/py')
-sys.path.append('./../../utils/py')
+from apricot       import TestWithServers
 
-import ServerUtils
-import WriteHostFile
-from daos_api import DaosPool, DaosContext, DaosApiError
+from daos_api import DaosPool, DaosApiError
 
-class SimpleCreateDeleteTest(Test):
+class SimpleCreateDeleteTest(TestWithServers):
     """
     Tests DAOS pool creation, trying both valid and invalid parameters.
 
-    :avocado: tags=pool,poolcreate,simplecreate
+    :avocado: recursive
     """
-    # super wasteful since its doing this for every variation
-    def setUp(self):
-        self.pool = None
-        self.hostlist = None
-
-        with open('../../../.build_vars.json') as filep:
-            build_paths = json.load(filep)
-        basepath = os.path.normpath(build_paths['PREFIX']  + "/../")
-
-        self.context = DaosContext(build_paths['PREFIX'] + '/lib/')
-        self.hostlist = self.params.get("test_machines", '/run/hosts/')
-        hostfile = WriteHostFile.WriteHostFile(self.hostlist, self.workdir)
-
-        server_group = self.params.get("server_group", '/server/', 'daos_server')
-
-        ServerUtils.runServer(self.hostfile, server_group, basepath)
-
     def tearDown(self):
         try:
             if self.pool is not None and self.pool.attached:
                 self.pool.destroy(1)
         finally:
-            ServerUtils.stopServer(hosts=self.hostlist)
+            super(SimpleCreateDeleteTest, self).tearDown()
 
     def test_create(self):
         """

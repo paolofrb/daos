@@ -1,6 +1,6 @@
 #!/usr/bin/python
 '''
-  (C) Copyright 2018 Intel Corporation.
+  (C) Copyright 2018-2019 Intel Corporation.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -23,17 +23,11 @@
 '''
 
 import os
-import time
 import traceback
-import sys
 import json
 import ctypes
-from avocado import Test, main
+from apricot import Test
 
-sys.path.append('../util')
-sys.path.append('../../../utils/py')
-sys.path.append('./util')
-sys.path.append('./../../utils/py')
 
 import ServerUtils
 import WriteHostFile
@@ -45,7 +39,7 @@ class BadExcludeTest(Test):
     Tests target exclude calls passing NULL and otherwise inappropriate
     parameters.  This can't be done with daosctl, need to use the python API.
 
-    :avocado: tags=pool,badparam,badexclude
+    :avocado: recursive
     """
 
     def setUp(self):

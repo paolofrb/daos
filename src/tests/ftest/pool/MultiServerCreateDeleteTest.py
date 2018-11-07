@@ -24,13 +24,11 @@
 
 import os
 import traceback
-import sys
 import json
 
-from avocado       import Test
 from avocado.utils import process
+from apricot       import Test
 
-sys.path.append('./util')
 import ServerUtils
 import CheckForPool
 import WriteHostFile
@@ -38,6 +36,8 @@ import WriteHostFile
 class MultiServerCreateDeleteTest(Test):
     """
     Tests DAOS pool creation, trying both valid and invalid parameters.
+
+    :avocado: recursive
     """
     # super wasteful since its doing this for every variation
     def setUp(self):

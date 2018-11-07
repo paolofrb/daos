@@ -23,7 +23,6 @@
     '''
 
 import os
-import sys
 import json
 import distutils.spawn
 from avocado       import Test

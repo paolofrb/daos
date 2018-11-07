@@ -23,16 +23,10 @@
 '''
 
 import os
-import time
 import traceback
-import sys
 import json
-from avocado import Test, main
+from apricot import Test
 
-sys.path.append('../util')
-sys.path.append('../../../utils/py')
-sys.path.append('./util')
-sys.path.append('./../../utils/py')
 
 import ServerUtils
 import WriteHostFile
@@ -42,6 +36,8 @@ class BadQueryTest(Test):
     """
     Tests pool query calls passing NULL and otherwise inappropriate
     parameters.  This can't be done with daosctl, need to use the python API.
+
+    :avocado: recursive
     """
 
     # super wasteful since its doing this for every variation

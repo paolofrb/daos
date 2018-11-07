@@ -1,16 +1,8 @@
 #!/usr/bin/python
 
-import os
-import time
-
-from avocado import Test
-from avocado import main
-from avocado.utils import process
-from avocado.utils import git
-from avocado.utils import cpu
 from avocado.utils import genio
 import aexpect
-from aexpect.client import run_bg
+from apricot import Test
 
 def printFunc(thestring):
         print(thestring)
@@ -21,19 +13,13 @@ class ServerLaunch(Test):
     """
     Tests launching a DAOS server.
 
-    avocado: tags=server
+    :avocado: recursive
     """
 
-    def setUp(self):
-        # not used at present
-        pass
-
-    def tearDown(self):
-        # not used at present
-        pass
-
     def test_launch(self):
-
+        """
+        :avocado: tags=server
+        """
         host = self.params.get("hostname",'/tests/', "localhost")
         hostfile = self.params.get("hostfile1",'/files/',"/tmp/hostfile1")
         urifile = self.params.get("urifile",'/files/',"/tmp/urifile")

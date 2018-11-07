@@ -1,6 +1,6 @@
 #!/usr/bin/python
 """
-  (C) Copyright 2018 Intel Corporation.
+  (C) Copyright 2018-2019 Intel Corporation.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -22,16 +22,11 @@
   portions thereof marked with this legend must also reproduce the markings.
 """
 
-import sys
 import os
 import json
 import subprocess
-from avocado import Test
+from apricot import Test
 
-sys.path.append('../util')
-sys.path.append('../../../utils/py')
-sys.path.append('./util')
-sys.path.append('./../../utils/py')
 
 import ServerUtils
 import WriteHostFile
@@ -41,7 +36,20 @@ class CartSelfTest(Test):
     """
     Runs a few variations of CaRT self-test to ensure network is in a
     stable state prior to testing.
+    :avocado: recursive
     """
+
+    def __init__(self, *args, **kwargs):
+        super(CartSelfTest, self).__init__(*args, **kwargs)
+
+        self.self_test_bin = None
+        self.endpoint = None
+        self.max_rpcs = None
+        self.repetitions = None
+        self.message_size = None
+        self.share_addr = None
+        self.env_dict = None
+        self.env_list = None
 
     # start servers, establish file locations, etc.
     def setUp(self):
