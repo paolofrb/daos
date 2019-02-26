@@ -447,6 +447,12 @@ pool_properties(void **state)
 		assert_int_equal(rc, 1); /* fail the test */
 	}
 
+	entry = daos_prop_entry_get(prop_query, DAOS_PROP_PO_ACL);
+	if (entry == NULL) {
+		print_message("ACL prop verification failed.\n");
+		assert_int_equal(rc, 1); /* fail the test */
+	}
+
 	daos_prop_free(prop);
 	daos_prop_free(prop_query);
 	test_teardown((void **)&arg);
