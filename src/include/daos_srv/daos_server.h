@@ -107,6 +107,24 @@ dss_tls_get()
 		pthread_getspecific(dss_tls_key);
 }
 
+#define D_TIME_START(sp, time)				\
+do {							\
+	if ((sp) == NULL)				\
+		break;					\
+	time = daos_get_ntime();				\
+} while (0);
+
+#define D_TIME_END(sp, id, time)			\
+do {							\
+	uint64_t end;					\
+							\
+	if ((sp) == NULL)				\
+		break;					\
+	end = daos_get_ntime();				\
+							\
+	srv_profile_count(sp, id, (int)(end - time));	\
+} while (0);
+
 /**
  * Get value from context by the key
  *
@@ -186,6 +204,46 @@ struct dss_drpc_handler {
 	drpc_handler_t	handler;	/** dRPC handler for the module */
 };
 
+struct srv_obj_profile {
+	int	pro_id;		/* id in obj_profile_op */
+	int	pro_time;	/* time cost for this id */
+};
+
+struct srv_profile_chunk {
+	d_list_t	      spc_chunk_list;
+	struct srv_obj_profile *spc_profiles;
+	int		      spc_idx;
+	int		      spc_chunk_size;
+};
+
+struct srv_profile {
+	struct srv_profile_chunk *sp_current_chunk;
+	d_list_t	sp_list;
+	d_list_t	sp_idle_list;
+	/* Count in idle list & list */
+	int		sp_chunk_total_cnt;
+	/* count in list */
+	int		sp_chunk_cnt;
+	char		*sp_dir_path;
+	char		**sp_names;
+	ABT_thread	sp_dump_thread;
+	int		sp_stop:1;
+};
+
+struct dss_module_ops {
+	/* The callback for each module will choose ABT pool to handle RPC */
+	ABT_pool (*dms_abt_pool_choose_cb)(crt_rpc_t *rpc, ABT_pool *pools);
+
+	/* Each module to start/stop the profiling */
+	int	(*dms_profile_start)(char *path);
+	int	(*dms_profile_stop)(void);
+};
+
+int srv_profile_stop(struct srv_profile *sp);
+int srv_profile_count(struct srv_profile *sp, int id, int time);
+int srv_profile_start(struct srv_profile **sp_p, char *path, char **names);
+void srv_profile_destroy(struct srv_profile *sp);
+
 /**
  * Each module should provide a dss_module structure which defines the module
  * interface. The name of the allocated structure must be the library name
@@ -224,6 +282,9 @@ struct dss_module {
 	struct daos_rpc_handler	 *sm_handlers;
 	/* dRPC handlers, for unix socket comm, last entry must be empty */
 	struct dss_drpc_handler	 *sm_drpc_handlers;
+
+	/* Different module operation */
+	struct dss_module_ops	*sm_mod_ops;
 };
 
 /** ULT types to determine on which XS to schedule the ULT */
@@ -345,7 +406,7 @@ int dss_task_run(tse_task_t *task, unsigned int type, tse_task_cb_t cb,
 int dss_eventual_create(ABT_eventual *eventual_ptr);
 int dss_eventual_wait(ABT_eventual eventual);
 void dss_eventual_free(ABT_eventual *eventual);
-
+struct dss_module *dss_module_get(int mod_id);
 /* Convert Argobots errno to DAOS ones. */
 static inline int
 dss_abterr2der(int abt_errno)
