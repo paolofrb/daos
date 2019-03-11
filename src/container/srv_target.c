@@ -524,6 +524,16 @@ ds_cont_local_open(uuid_t pool_uuid, uuid_t cont_hdl_uuid, uuid_t cont_uuid,
 		*cont_hdl = hdl;
 	}
 
+	if (cont_uuid != NULL) {
+		rc = dtx_resync(hdl->sch_pool->spc_hdl, pool_uuid,
+				cont_uuid, hdl->sch_pool->spc_map_version);
+		if (rc != 0)
+			/* Just warning, not fail out. */
+			D_WARN("Fail to resync some DTX(s) status, that may "
+			       "cause some unexpected IO result in subsequent "
+			       "operations: rc = %d.\n", rc);
+	}
+
 	return 0;
 
 err_cont:
@@ -1035,15 +1045,25 @@ ds_cont_tgt_epoch_aggregate_aggregator(crt_rpc_t *source, crt_rpc_t *result,
 	return 0;
 }
 
-/* iterate all of objects of the container. */
+/* iterate all of objects or uncommitted DTXs of the container. */
 int
-ds_cont_obj_iter(daos_handle_t ph, uuid_t co_uuid,
-		 cont_iter_cb_t callback, void *arg)
+ds_cont_iter(daos_handle_t ph, uuid_t po_uuid, uuid_t co_uuid,
+	     cont_iter_cb_t callback, void *arg, uint32_t ver, uint32_t type)
 {
 	vos_iter_param_t param;
 	daos_handle_t	 iter_h;
 	daos_handle_t	 coh;
 	int		 rc;
+
+	/* Resync DTX before scan others in the container. */
+	if (type != VOS_ITER_DTX) {
+		rc = dtx_resync(ph, po_uuid, co_uuid, ver);
+		if (rc != 0) {
+			D_ERROR("Fail to resync some DTX(s) status, that will "
+				"affect subsequent object rebuild: %d.\n", rc);
+			return rc;
+		}
+	}
 
 	rc = vos_cont_open(ph, co_uuid, &coh);
 	if (rc != 0) {
@@ -1058,7 +1078,7 @@ ds_cont_obj_iter(daos_handle_t ph, uuid_t co_uuid,
 	param.ip_epr.epr_hi = DAOS_EPOCH_MAX;
 	param.ip_flags = VOS_IT_FOR_REBUILD;
 
-	rc = vos_iter_prepare(VOS_ITER_OBJ, &param, &iter_h);
+	rc = vos_iter_prepare(type, &param, &iter_h);
 	if (rc != 0) {
 		D_ERROR("prepare obj iterator failed %d\n", rc);
 		D_GOTO(close, rc);
@@ -1089,7 +1109,7 @@ ds_cont_obj_iter(daos_handle_t ph, uuid_t co_uuid,
 		D_DEBUG(DB_ANY, "iter "DF_UOID"/"DF_UUID"\n",
 			DP_UOID(ent.ie_oid), DP_UUID(co_uuid));
 
-		rc = callback(co_uuid, ent.ie_oid, ent.ie_epoch, arg);
+		rc = callback(co_uuid, &ent, arg);
 		if (rc) {
 			D_DEBUG(DB_ANY, "iter "DF_UOID" rc %d\n",
 				DP_UOID(ent.ie_oid), rc);
