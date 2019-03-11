@@ -91,7 +91,6 @@ struct pl_map {
 	int			 pl_ref;
 	/** pool connections, protected by pl_rwlock */
 	int			 pl_connects;
-	unsigned int		 pl_ignore_connects:1;
 	/** type of placement map */
 	pl_map_type_t		 pl_type;
 	/** reference to pool map */
@@ -106,8 +105,7 @@ void pl_map_destroy(struct pl_map *map);
 void pl_map_print(struct pl_map *map);
 
 struct pl_map *pl_map_find(uuid_t uuid, daos_obj_id_t oid);
-int  pl_map_update(uuid_t uuid, struct pool_map *new_map, bool connect,
-		   bool ignore_connects);
+int  pl_map_update(uuid_t uuid, struct pool_map *new_map, bool connect);
 void pl_map_disconnect(uuid_t uuid);
 void pl_map_addref(struct pl_map *map);
 void pl_map_decref(struct pl_map *map);
