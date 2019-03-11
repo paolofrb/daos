@@ -106,6 +106,8 @@ enum obj_rpc_flags {
 	ORF_FROM_LEADER		= (1 << 2),
 	/** Abort the (dead) DTX by force on conflict. */
 	ORF_DTX_AOC		= (1 << 3),
+	/** Disable DTX or not. */
+	ORF_DTX_DISABLED	= (1 << 4),
 };
 
 /** to identify each obj shard's target */

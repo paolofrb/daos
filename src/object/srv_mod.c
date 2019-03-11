@@ -32,12 +32,30 @@
 #include "obj_rpc.h"
 #include "obj_internal.h"
 
+/**
+ * The obj_start_time records the timestamp when server starts the serive.
+ * Via comparing with the DTX entry's timestamp, we can know whether
+ * the DTX happened before the server restarting its service or not.
+ */
+uint64_t srv_start_time;
+
+/**
+ * Swtich of enable DTX or not, enabled by default.
+ */
+bool srv_enable_dtx = true;
+
 static int
 obj_mod_init(void)
 {
 	dss_abt_pool_choose_cb_register(DAOS_OBJ_MODULE,
 					ds_obj_abt_pool_choose_cb);
 	vos_dtx_register_check_leader(ds_pool_check_leader);
+	srv_start_time = time(NULL);
+	d_getenv_bool("DAOS_ENABLE_DTX", &srv_enable_dtx);
+	if (srv_enable_dtx)
+		D_DEBUG(DB_IO, "DTX is enabled.\n");
+	else
+		D_DEBUG(DB_IO, "DTX is disabled.\n");
 	return 0;
 }
 

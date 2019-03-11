@@ -59,6 +59,12 @@ daos_dti_copy(struct daos_tx_id *des, struct daos_tx_id *src)
 		memset(des, 0, sizeof(*des));
 }
 
+static inline bool
+daos_is_zero_dti(struct daos_tx_id *dti)
+{
+	return dti->dti_sec == 0;
+}
+
 #define DF_DTI		DF_UUID
 #define DP_DTI(dti)	DP_UUID((dti)->dti_uuid)
 

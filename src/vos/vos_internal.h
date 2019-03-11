@@ -52,9 +52,6 @@ extern struct dss_module_key vos_module_key;
 #define VOS_BLK_SZ		(1UL << VOS_BLK_SHIFT) /* bytes */
 #define VOS_BLOB_HDR_BLKS	1	/* block */
 
-/** hash seed for murmur hash */
-#define VOS_BTR_MUR_SEED	0xC0FFEE
-
 static inline uint32_t vos_byte2blkcnt(uint64_t bytes)
 {
 	D_ASSERT(bytes != 0);

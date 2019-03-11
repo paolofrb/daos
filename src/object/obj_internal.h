@@ -52,6 +52,8 @@
 extern bool	cli_bypass_rpc;
 /** Switch of server-side IO dispatch */
 extern bool	srv_io_dispatch;
+extern bool srv_enable_dtx;
+extern uint64_t srv_start_time;
 
 /** client object shard */
 struct dc_obj_shard {
@@ -185,8 +187,9 @@ struct obj_req_disp_arg;
 int ds_obj_req_disp_prepare(crt_opcode_t opc,
 			struct daos_obj_shard_tgt *fw_shard_tgts,
 			uint32_t fw_cnt, ds_iofw_cb_t prefw_cb,
-			void *prefw_arg, ds_iofw_cb_t postfw_cb,
-			void *postfw_arg, struct obj_req_disp_arg **arg);
+			ds_iofw_cb_t postfw_cb, void *cb_data,
+			int dti_cos_count, struct daos_tx_id *dti_cos,
+			struct obj_req_disp_arg **arg);
 void ds_obj_req_dispatch(void *arg);
 int ds_obj_req_disp_wait(struct obj_req_disp_arg *obj_arg);
 void ds_obj_req_disp_arg_free(struct obj_req_disp_arg *obj_arg);
