@@ -1,0 +1,46 @@
+<!DOCTTYPE html>
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script>
+
+var getQueryParam = function(param) {
+    var found;
+    window.location.search.substr(1).split("&").forEach(function(item) {
+        if (param == item.split("=")[0]) {
+            found =  item.split("=")[1];
+        }
+    });
+    return found;
+};
+
+var page_url = window.location.pathname;
+page_url = page_url.replace('github.com', 'raw.githubusercontent.com')
+page_url = page_url.replace('blob/', '')
+
+var pageExecute = {
+
+    fileContents:"Null",
+    pagePrefix:"Null",
+    slides:"Null",
+
+    init: function () {
+        $.ajax({
+            url: page_url.replace('doc/html.*', getQueryParam("file")),
+            success: function (data){
+                pageExecute.fileContents = data;
+            }
+        });
+    }
+};
+
+pageExecute.init();
+</script>
+</head>
+
+<noscript>Sorry, your browswer does not support JavaScript!</noscript>
+
+<body>
+<script type="text/javascript">document.write(pageExecute.fileContents)</script>
+</body>
+</html>

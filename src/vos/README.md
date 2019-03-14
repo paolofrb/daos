@@ -1,7 +1,7 @@
 
 # Versioning Object Store
 
-The Versioning Object Store (VOS) is responsible for providing and maintaining a persistent object store that supports byte-granular access and versioning for a single shard in a DAOS pool.
+The Versioning Object Store (VOS) is responsible for providing and maintaining a persistent object store that supports byte-granular access and versioning for a single shard in a <a href="../../doc/storage_model.md">DAOS pool</a>.
 It maintains its own metadata in persistent memory and may store data either in persistent memory or on block storage, depending on available storage and performance requirements.
 It must provide this functionality with minimum overhead so that performance can approach the theoretical performance of the underlying hardware as closely as possible, both with respect to latency and bandwidth.
 Its internal data structures, in both persistent and non-persistent memory, must also support the highest levels of concurrency so that throughput scales over the cores of modern processor architectures.
@@ -13,7 +13,7 @@ This document contains the following sections:
 
 - <a href="#62">Persistent Memory based Storage</a>
     - <a href="#63">In-Memory Storage</a>
-    - <a href="#64">Lightweight I/O Stack: NVM Library</a>
+    - <a href="#64">Lightweight I/O Stack: PMDK Libraries</a>
 - <a href="#71">VOS Concepts</a>
     - <a href="#711">VOS Indexes</a>
     - <a href="#712">Object Listing</a>
@@ -22,10 +22,9 @@ This document contains the following sections:
     - <a href="#723">Key in VOS KV Stores</a>
     - <a href="#724">Internal Data Structures</a>
 - <a href="#73">Key Array Stores</a>
-- <a href="#75">Epoch Based Operations</a>
-    - <a href="#751">VOS Discard</a>
-    - <a href="#752">VOS Aggregate</a>
-    - <a href="#753">VOS Flush</a>
+- <a href="#74">Epoch Based Operations</a>
+    - <a href="#741">VOS Discard</a>
+    - <a href="#742">VOS Aggregate</a>
 - <a href="#76">VOS over NVM Library</a>
     - <a href="#761">Root Object</a>
 - <a href="#77">Layout for Index Tables</a>
@@ -48,17 +47,17 @@ This enables a disruptive change in performance compared to conventional storage
 Direct access to byte-addressable low-latency storage opens up new horizons where metadata can be scanned in less than a second without bothering with seek time and alignment.
 
 The VOS relies on a log-based architecture using persistent memory primarily to maintain internal persistent metadata indexes.
-The actual data can be stored either in persistent memory directly or in block-based storage (via <a href="https://spdk.io/">SPDK</a> for instance).
+The actual data can be stored either in persistent memory directly or in block-based NVMe storage.
 The DAOS service has two tiers of storage: Storage Class Memory (SCM) for byte-granular application data and metadata, and NVMe for bulk application data.
-Similar to how PMDK is currently used to faciliate access to SCM, the Storage Performance Development Kit (SPDK) is used to provide seamless and efficient access to NVMe SSDs.
+Similar to how PMDK is currently used to faciliate access to SCM, the Storage Performance Development Kit (<a href="https://spdk.io/">SPDK</a>) is used to provide seamless and efficient access to NVMe SSDs.
 The current DAOS storage model involves three DAOS server xstreams per core, along with one main DAOS server xstream per core mapped to an NVMe SSD device.
 DAOS storage allocations can occur on either SCM by using a PMDK pmemobj pool, or on NVMe, using an SPDK blob.
 All local server metadata will be stored in a per-server pmemobj pool on SCM and will include all current and relevant NVMe device, pool, and xstream mapping information.
-Please refer to the Blob I/O (BIO) module for more information regarding NVMe, SPDK, and per-server metadata.
-Special care will be taken when developing the VOS layer because any software bug could corrupt data structures in persistent memory.
-The VOS therefore checksums its persistent data structures despite the presence of hardware ECC.
+Please refer to the <a href="../bio/README.md">Blob I/O</a> (BIO) module for more information regarding NVMe, SPDK, and per-server metadata.
+Special care is taken when developing and modifying the VOS layer because any software bug could corrupt data structures in persistent memory.
+The VOS, therefore, checksums its persistent data structures despite the presence of hardware ECC.
 
-The VOS provides a lightweight I/O stack fully in user space, leveraging the PMDK open source libraries developed to support this programming model.
+The VOS provides a lightweight I/O stack fully in user space, leveraging the <a href="pmem.io">PMDK</a> open source libraries developed to support this programming model.
 
 <a id="64"></a>
 
@@ -106,16 +105,24 @@ The first is an object index used to map an object ID and epoch to object metada
 The other two indicies are for maintining active and committed <a href="#811">DTX</a> records for ensuring efficient updates across multiple replicas.
 
 DAOS supports two types of values, each associated with a Distribution Key (DKEY) and an Attribute Key (AKEY): Single value and Array value.
-An update to a single value replaces the entire value whereas an array update only replaces the records specified in the update.
-The DAOS API provides generic Key-Value and Array abstractions built on this underlying interface.
-For the remainder of this document, Key-Value will describe DKEY-AKEY-Single Value whereas Key-Array will describe DKEY-AKEY-Array.
+The DKEY is used for placement, determining which VOS pool is used to store the data.
+The AKEY identifies the data to be stored.
+The ability to to specify both a DKEY and an AKEY provides applications with flexibility to either distribute or co-locate different values in DAOS.
+A single value is an atomic value meaning that writes to an AKEY update the entire value and reads retrieve the latest value in its entirety.
+An array value is an index of equally sized records.  Each update to an array value only affects the specified records and reads read the latest updates to each record index requested.
+Each VOS pool maintains the VOS provides a per container hierarchy of containers, objects, DKEYs, AKEYs, and values as shown <a href="#7a">below</a>.
+The DAOS API provides generic Key-Value and Array abstractions built on this underlying interface.  The former sets the DKEY to the user specified key and uses a fixed AKEY.
+The latter uses the upper bits of the array index to create a DKEY and uses a fixed AKEY thus evenly distributing array indices over all VOS pools in the object layout.
+For the remainder of the VOS description, Key-Value and Key-Array shall be used to describe the VOS layout rather than these simplifying abstractions.
+In other words, they shall describe the DKEY-AKEY-Value in a single VOS pool.
 
 VOS objects are not created explicitly, but are created on first write by creating the object metadata and inserting a reference to it in the owning container's object index.
 All object updates log the data for each update, which may be an object, DKEY, AKEY, single value, or array value punch or an update to a single value or array value.
 Note that "punch" of an extent of an array object is logged as zeroed extents, rather than causing relevant array extents or key values to be discarded. A punch of an object, DKEY, AKEY, or single value is logged so that reads at a later timestamp see no data.
 This ensures that the full version history of objects remain accessible.   The DAOS api, however, only allows accessing data at snapshots so VOS aggregation can aggresively remove objects, keys, and values that are no longer accessible at a known snapshot.
 
-TODO: Placeholder for new VOS figure
+<a id="7a"></a>
+![../../doc/graph/Fig_067.png](../../doc/graph/Fig_067.png "VOS Pool storage layout")
 
 When performing lookup on a single value in an object, the object index is traversed to find the index node with the highest epoch number less than or equal to the requested epoch (near-epoch) that matches the key.
 If a value or negative entry is found, it is returned.
@@ -140,24 +147,44 @@ Hints about the expectations of the object can be encoded in the object ID.
 For example, an object can be replicated, erasure coded, use checksums, or have integer or lexical DKEYs and/or AKEYs.
 If integer or lexical keys are used, the object index is ordered by keys, making queries, such as array size, more efficient.
 Otherwise, keys are ordered by the hashed value in the index.
-The type of object is identified from the object ID.
+The object ID is 128 bits.  The upper 32 bits are used to encodes the object type, and key types while the lower 96 bits are a user defined identifier that must be unique to the container.
 
 <a id="712"></a>
 
 ### Object Listing
 
-VOS provides a generic iterator that can be used to iterate through objects, DKEYs, AKEYs, single values, and array extents in a container.
-The object ID is 64 bits and encodes the object type, dkey and akey types, and a user definable identifier that must be unique to the container of 64 bits.
-This can allow enumeration of object IDs for a type of object.
-Interfaces to enumerate byte array and key value objects are shown in the <a href="#7b">figure</a> below.
-At all times, the object index hash table holds only object IDs that are non-empty, i.e., if an index tree associated with an object is empty (after an aggregation/discard), the object ID and its associated indexes are removed from the object index hash table.
+VOS provides a generic iterator that can be used to iterate through containers, objects, DKEYs, AKEYs, single values, and array extents in a VOS pool.
+The iteration API is shown in the <a href="#7b">figure</a> below.
 
 <a id="7b"></a>
-TODO: Fix this figure.  Figure out if there is a way to just reference the header which will always be up-to-date
-![../../doc/graph/Fig_009.png](../../doc/graph/Fig_009.png "Interfaces for enumeration KV and Byte array objects")
+```
+/**
+ * Iterate VOS entries (i.e., containers, objects, dkeys, etc.) and call \a
+ * cb(\a arg) for each entry.
+ *
+ * If \a cb returns a nonzero (either > 0 or < 0) value that is not
+ * -DER_NONEXIST, this function stops the iteration and returns that nonzero
+ * value from \a cb. If \a cb returns -DER_NONEXIST, this function completes
+ * the iteration and returns 0. If \a cb returns 0, the iteration continues.
+ *
+ * \param[in]		param		iteration parameters
+ * \param[in]		type		entry type of starting level
+ * \param[in]		recursive	iterate in lower level recursively
+ * \param[in]		anchors		array of anchors, one for each
+ *					iteration level
+ * \param[in]		cb		iteration callback
+ * \param[in]		arg		callback argument
+ *
+ * \retval		0	iteration complete
+ * \retval		> 0	callback return value
+ * \retval		-DER_*	error (but never -DER_NONEXIST)
+ */
+int
+vos_iterate(vos_iter_param_t *param, vos_iter_type_t type, bool recursive,
+	    struct vos_iter_anchors *anchors, vos_iter_cb_t cb, void *arg);
+```
 
-The interfaces shown in the <a href="7b">figure</a> above track the next object ID to extract with the help of an iterator.
-The same iterator routines would be used within VOS for enumeration of containers, all object types, DKEYs, AKEYs, single values, and array extents.
+The generic VOS iterator API enables both the DAOS enumeration API as well as DAOS internal features supporting rebuild, aggregation, and discard.
 
 <a id="72"></a>
 
@@ -194,23 +221,32 @@ The key-value record of the KV-object is stored in the tree as value of its node
 So in case of punch this value contains a "special" return code/flag to identify the punch operation.
 
 VOS also supports enumeration of keys belonging to a particular epoch.
-VOS uses iterators that can iterate through the KV store in listing all the keys and their associated values to support this enumeration.
 
 <a id="723"></a>
 
 ### Key in VOS KV Stores
 
 VOS KV supports key sizes from small keys to extremely large keys.
-To provide this level of flexibility VOS hashes the keys with an assumption that with a fast and consistent hash function one can get the same hash-value for the same key.
-This way the actual key is stored once along with the value, and the hash-value of the key is used in the index structure.
-A lightweight hash function like xxHash MurMur64 can be used.
-To verify hash collisions, the "actual key" in the KV store must be compared with the "actual key" being inserted or searched, once the node is located.
-Although with a good hash function collision is a remote chance, comparison of keys is required for correctness.
-But the approach of hashing keys still avoids having to compare every huge key in the search path, which would save lot of CPU cycles especially during lookups.
-
-Additionally, VOS supports specialized integer and lexical key types.
-These types of keys are specified when creating the object id.
-When such keys are used, VOS doesn't hash the keys but rather uses the original key value for comparisons resulting in a key-ordered index, numerically or lexically sorted, respectively.
+For AKEYs and DKEYs, VOS supports either hashed keys or one of two types of
+"direct" keys: lexical or integer.
+#### Hashed Keys
+The most flexible key type is the hashed key.   VOS runs two fast hash
+algorithms on the user supplied key and uses the combined hashed key values for
+the index.  The intention of the combined hash is to avoid collisions between
+keys. The actual key still must be compared for correctness.
+#### Direct Keys
+The use of hashed keys results in unordered keys.  This is problematic in cases
+where the user's algorithms may benefit from ordering.   Therefore, VOS supports
+two types of keys that are not hashed, but rather interpreted directly.
+##### Lexical Keys
+Lexical keys are compared using a lexical ordering.  This enables usage such as
+sorted strings.   Presently, lexical keys are limited in length, however to
+80 characters.
+##### Integer Keys
+Integer keys are unsigned 64-bit integers and are compared as such.   This
+enables use cases such as DAOS array API using the upper bits of the index
+as a dkey and the lower bits as an offset. This enables such objects to use the
+the DAOS key query API to calculate the size more efficiently.
 
 KV stores in VOS allow the user to maintain versions of the different KV pairs in random order.
 For example, an update can happen in epoch 10 and followed by another update in epoch 5, where HCE is less than 5.
@@ -387,7 +423,7 @@ For deleting nodes from an EV-Tree, same approach as search can be used to locat
 Once deleted, to coalesce multiple leaf-nodes that have less than order/2 entries, reinsertion is done.
 EV-tree reinserts are done (instead of merging leaf-nodes as in B+ trees) because on deletion of leaf node/slots, the size of bounding boxes changes, and it is important to make sure the rectangles are organized into minimum bounding boxes without unnecessary overlaps.
 In VOS, delete is required only during aggregation and discard operations.
-These operations are discussed in a following section (<a hfer="#75">Epoch Based Operations</a>).
+These operations are discussed in a following section (<a hfer="#74">Epoch Based Operations</a>).
 
 
 <a id="74"></a>
@@ -409,7 +445,7 @@ To rollback history VOS provides the discard operation.
 
 Aggregate and discard operations in VOS accept a range of epochs to be aggregated normally corresponding to ranges between persistent snapshots.
 
-<a id="751"></a>
+<a id="741"></a>
 
 ### VOS Discard
 
@@ -423,7 +459,7 @@ During discard, keys and byte-array rectangles need to be searched for nodes/slo
 This means that there was an update before the now discarded epoch and its validity got modified to support near-epoch lookup.
 This epoch validity of the previous update has to be extended to infinity to ensure future lookups at near-epoch would fetch the last known updated value for the key/extent range.
 
-<a id="752"></a>
+<a id="742"></a>
 
 ### VOS Aggregate
 
