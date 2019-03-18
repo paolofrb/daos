@@ -35,6 +35,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <sys/types.h>
 
 #define	DAOS_ACL_VERSION		1
@@ -291,6 +292,17 @@ daos_ace_get_size(struct daos_ace *ace);
  */
 void
 daos_ace_dump(struct daos_ace *ace, uint tabs);
+
+/**
+ * Sanity check the Access Control Entry structure for valid values and internal
+ * consistency.
+ *
+ * \param	ace	Access Control Entry to be checked
+ *
+ * \return	True if the ACE is valid, false otherwise
+ */
+bool
+daos_ace_validate(struct daos_ace *ace);
 
 #if defined(__cplusplus)
 }
