@@ -171,4 +171,4 @@ def stop_agent(client_list):
     # this kills the agent
     for client in client_list:
         cmd = "pkill daos_agent"
-        dummy_resp = subprocess.call(["ssh", client, cmd])
+        subprocess.call(["ssh", client, cmd])
