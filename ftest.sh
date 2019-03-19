@@ -270,4 +270,9 @@ if ! rpdcp -l jenkins -R ssh -w "$(IFS=','; echo "${nodes[*]}")" \
     echo "Copying daos.logs from remote nodes failed"
     # pass
 fi
+if ! rpdcp -l jenkins -R ssh -w "$(IFS=','; echo "${nodes[*]}")" \
+    /tmp/daos_agent.log "$PWD"/; then
+    echo "Copying daos_agent.logs from remote nodes failed"
+    # pass
+fi
 exit "$rc"
