@@ -2414,6 +2414,7 @@ evt_ssof_insert(struct evt_context *tcx, struct evt_node *nd,
 		 */
 		const daos_csum_buf_t *csum = &ent->ei_csum;
 
+		/* [todo-ryon]: move these because not in txn */
 		tcx->tc_root->tr_csum_len		= csum->cs_len;
 		tcx->tc_root->tr_csum_type		= csum->cs_type;
 		tcx->tc_root->tr_csum_chunk_size	= csum->cs_chunksize;
