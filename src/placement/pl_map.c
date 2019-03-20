@@ -92,7 +92,6 @@ pl_map_create_inited(struct pool_map *pool_map, struct pl_map_init_attr *mia,
 	map->pl_connects = 0;
 	map->pl_type = mia->ia_type;
 	map->pl_ops  = dict->pd_ops;
-	map->pl_ignore_connects = 0;
 	D_INIT_LIST_HEAD(&map->pl_link);
 
 	*pl_mapp = map;
@@ -407,11 +406,9 @@ pl_map_create(struct pool_map *pool_map, struct pl_map_init_attr *mia,
  * \param	uuid [IN]	uuid of \a pool_map
  * \param	pool_map [IN]	pool_map
  * \param	connect [IN]	from pool connect or not
- * \param	ignore_connects [IN] Ignore the @connect parameter if true
  */
 int
-pl_map_update(uuid_t uuid, struct pool_map *pool_map, bool connect,
-	      bool ignore_connects)
+pl_map_update(uuid_t uuid, struct pool_map *pool_map, bool connect)
 {
 	d_list_t		*link;
 	struct pl_map		*map;
@@ -435,28 +432,14 @@ pl_map_update(uuid_t uuid, struct pool_map *pool_map, bool connect,
 		rc = pl_map_create_inited(pool_map, &mia, &map);
 		if (rc != 0)
 			D_GOTO(out, rc);
-
-		if (ignore_connects)
-			map->pl_ignore_connects = 1;
 	} else {
 		struct pl_map	*tmp;
 
 		tmp = container_of(link, struct pl_map, pl_link);
-		if (ignore_connects) {
-			if (tmp->pl_connects > 0) {
-				D_WARN("NOT allow to update pl map for pool"
-				       DF_UUID" with connection ignored.\n",
-				       DP_UUID(uuid));
-				D_GOTO(out, rc = -DER_INVAL);
-			}
-
-			tmp->pl_ignore_connects = 1;
-		}
-
 		if (pl_map_version(tmp) >= pool_map_get_version(pool_map)) {
-			d_hash_rec_decref(&pl_htable, link);
-			if (connect && !tmp->pl_ignore_connects)
+			if (connect)
 				tmp->pl_connects++;
+			d_hash_rec_decref(&pl_htable, link);
 			D_GOTO(out, rc = 0);
 		}
 
@@ -467,19 +450,24 @@ pl_map_update(uuid_t uuid, struct pool_map *pool_map, bool connect,
 			D_GOTO(out, rc);
 		}
 
-		if (ignore_connects)
-			map->pl_ignore_connects = 1;
-		else
-			/* transfer the pool connection count */
-			map->pl_connects = tmp->pl_connects;
+		/* transfer the pool connection count */
+		map->pl_connects = tmp->pl_connects;
 
 		/* evict the old placement map for this pool */
 		d_hash_rec_delete_at(&pl_htable, link);
 		d_hash_rec_decref(&pl_htable, link);
 	}
 
-	if (connect && !map->pl_ignore_connects)
+	if (connect)
 		map->pl_connects++;
+	else if (map->pl_connects == 0)
+		/* For server-side pl_map, the pl_map_disconnect() will be
+		 * called only once when the pool is purged from cache. So
+		 * the server-side callers of pl_map_update() use false as
+		 * the @connect parameter. Here, we set the pl_connects as
+		 * 1 when pl_map is created to satisfy pl_map_disconnect().
+		 */
+		map->pl_connects = 1;
 
 	/* insert the new placement map into hash table */
 	uuid_copy(map->pl_uuid, uuid);
@@ -507,13 +495,8 @@ pl_map_disconnect(uuid_t uuid)
 		struct pl_map	*map;
 
 		map = container_of(link, struct pl_map, pl_link);
-		if (!map->pl_ignore_connects) {
-			D_ASSERT(map->pl_connects > 0);
-			map->pl_connects--;
-		} else {
-			D_ASSERT(map->pl_connects == 0);
-		}
-
+		D_ASSERT(map->pl_connects > 0);
+		map->pl_connects--;
 		if (map->pl_connects == 0)
 			d_hash_rec_delete_at(&pl_htable, link);
 

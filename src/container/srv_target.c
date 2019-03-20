@@ -524,6 +524,39 @@ ds_cont_local_open(uuid_t pool_uuid, uuid_t cont_hdl_uuid, uuid_t cont_uuid,
 		*cont_hdl = hdl;
 	}
 
+	/* It is possible that the server crashed before closing the container
+	 * normally. Then the DTXs' status in the CoS cache will be lost. That
+	 * will affect related data records' visibility. So we need to re-sync
+	 * the DTXs status when open the container for the first time (not for
+	 * cached container open handle).
+	 *
+	 * We do not sync DTXs status when close the container, because we may
+	 * have no chance to do that if:
+	 * 1. Current server crashed, or
+	 * 2. Other non-leader replica may crashed or stoppped already.
+	 *
+	 * We do not trigger dtx_resync() when start the server. Because:
+	 * 1. Currently, we do not support server re-integrate after restart.
+	 * 2. A server may has multiple pools and each pool may has multiple
+	 *    containers. These containers may not related with one another.
+	 *    Make all the DTXs resync together during the server start will
+	 *    cause the DTX resync time to be much longer than resync against
+	 *    single container just when use (open) it. On the other hand, if
+	 *    some servers are ready for dtx_resync, but others may not start
+	 *    yet, then the ready ones may have to wait or failed dtx_resync.
+	 *    Both cases are not expected.
+	 */
+	if (cont_uuid != NULL) {
+		rc = dtx_resync(hdl->sch_pool->spc_hdl, pool_uuid,
+				cont_uuid, hdl->sch_pool->spc_map_version);
+		if (rc != 0)
+			/* Just warning, not fail out. */
+			D_WARN("Fail to resync some DTX(s) for the pool/cont "
+			       DF_UUID"/"DF_UUID" that may affect subsequent "
+			       "operations: rc = %d.\n",
+			       DP_UUID(pool_uuid), DP_UUID(cont_uuid), rc);
+	}
+
 	return 0;
 
 err_cont:
@@ -1035,10 +1068,10 @@ ds_cont_tgt_epoch_aggregate_aggregator(crt_rpc_t *source, crt_rpc_t *result,
 	return 0;
 }
 
-/* iterate all of objects of the container. */
+/* iterate all of objects or uncommitted DTXs of the container. */
 int
-ds_cont_obj_iter(daos_handle_t ph, uuid_t co_uuid,
-		 cont_iter_cb_t callback, void *arg)
+ds_cont_iter(daos_handle_t ph, uuid_t po_uuid, uuid_t co_uuid,
+	     cont_iter_cb_t callback, void *arg, uint32_t type)
 {
 	vos_iter_param_t param;
 	daos_handle_t	 iter_h;
@@ -1058,7 +1091,7 @@ ds_cont_obj_iter(daos_handle_t ph, uuid_t co_uuid,
 	param.ip_epr.epr_hi = DAOS_EPOCH_MAX;
 	param.ip_flags = VOS_IT_FOR_REBUILD;
 
-	rc = vos_iter_prepare(VOS_ITER_OBJ, &param, &iter_h);
+	rc = vos_iter_prepare(type, &param, &iter_h);
 	if (rc != 0) {
 		D_ERROR("prepare obj iterator failed %d\n", rc);
 		D_GOTO(close, rc);
@@ -1089,7 +1122,7 @@ ds_cont_obj_iter(daos_handle_t ph, uuid_t co_uuid,
 		D_DEBUG(DB_ANY, "iter "DF_UOID"/"DF_UUID"\n",
 			DP_UOID(ent.ie_oid), DP_UUID(co_uuid));
 
-		rc = callback(co_uuid, ent.ie_oid, ent.ie_epoch, arg);
+		rc = callback(co_uuid, &ent, arg);
 		if (rc) {
 			D_DEBUG(DB_ANY, "iter "DF_UOID" rc %d\n",
 				DP_UOID(ent.ie_oid), rc);

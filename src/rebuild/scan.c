@@ -548,14 +548,13 @@ out:
 
 #define LOCAL_ARRAY_SIZE	128
 static int
-placement_check(uuid_t co_uuid, daos_unit_oid_t oid,
-		daos_epoch_t epoch, void *data)
+placement_check(uuid_t co_uuid, vos_iter_entry_t *ent, void *data)
 {
 	struct rebuild_scan_arg	*arg = data;
 	struct rebuild_tgt_pool_tracker *rpt = arg->rpt;
-	struct pl_obj_layout	*layout = NULL;
 	struct pl_map		*map = NULL;
 	struct daos_obj_md	md;
+	daos_unit_oid_t		oid = ent->ie_oid;
 	unsigned int		tgt_array[LOCAL_ARRAY_SIZE];
 	unsigned int		shard_array[LOCAL_ARRAY_SIZE];
 	unsigned int		*tgts = NULL;
@@ -608,9 +607,26 @@ placement_check(uuid_t co_uuid, daos_unit_oid_t oid,
 		 * myrank should always not equal to tgt_rebuild. XXX
 		 */
 		if (myrank != tgts[i]) {
+			daos_unit_oid_t		tmp = oid;
+
+			tmp.id_shard = shards[i];
+			rc = ds_pool_check_leader(rpt->rt_pool_uuid, &tmp,
+						  rpt->rt_rebuild_ver, NULL);
+			if (rc == 0) {
+				/* The leader shard is not on current server,
+				 * then current server does not know whether
+				 * related DTX(s) for current shard have been
+				 * committed or not. Skip the shard that will
+				 * be handled by the leader on another server.
+				 */
+				D_DEBUG(DB_REBUILD, "Skip non-leader replica "
+					DF_UOID".\n", DP_UOID(tmp));
+				continue;
+			}
+
 			rc = rebuild_object_insert(arg, tgts[i], shards[i],
 						   rpt->rt_pool_uuid, co_uuid,
-						   oid, epoch);
+						   oid, ent->ie_epoch);
 			if (rc)
 				D_GOTO(out, rc);
 		} else {
@@ -619,9 +635,6 @@ placement_check(uuid_t co_uuid, daos_unit_oid_t oid,
 		}
 	}
 out:
-	if (layout != NULL)
-		pl_obj_layout_free(layout);
-
 	if (tgts != tgt_array && tgts != NULL)
 		D_FREE(tgts);
 
@@ -652,8 +665,8 @@ rebuild_scanner(void *data)
 	while (daos_fail_check(DAOS_REBUILD_TGT_SCAN_HANG))
 		ABT_thread_yield();
 
-	return ds_pool_obj_iter(rpt->rt_pool_uuid, arg->callback,
-				arg->arg);
+	return ds_pool_iter(rpt->rt_pool_uuid, arg->callback, arg->arg,
+			    rpt->rt_rebuild_ver, DAOS_INTENT_REBUILD);
 }
 
 static int
@@ -692,7 +705,7 @@ rebuild_scan_leader(void *data)
 	ABT_mutex_lock(rpt->rt_lock);
 	map = rebuild_pool_map_get(rpt->rt_pool);
 	D_ASSERT(map != NULL);
-	rc = pl_map_update(rpt->rt_pool_uuid, map, false, true);
+	rc = pl_map_update(rpt->rt_pool_uuid, map, true);
 	if (rc != 0) {
 		ABT_mutex_unlock(rpt->rt_lock);
 		D_GOTO(out_map, rc = -DER_NOMEM);
@@ -704,7 +717,7 @@ rebuild_scan_leader(void *data)
 
 	rc = dss_thread_collective(rebuild_scanner, &iter_arg, 0);
 	if (rc)
-		D_GOTO(out_map, rc);
+		D_GOTO(put_plmap, rc);
 
 	D_DEBUG(DB_REBUILD, "rebuild scan collective "DF_UUID" done.\n",
 		DP_UUID(rpt->rt_pool_uuid));
@@ -717,7 +730,7 @@ rebuild_scan_leader(void *data)
 		rc = dbtree_iterate(arg->rebuild_tree_hdl, DAOS_INTENT_REBUILD,
 				    false, rebuild_tgt_fini_obj_send_cb, arg);
 		if (rc)
-			D_GOTO(out_map, rc);
+			D_GOTO(put_plmap, rc);
 	}
 
 	ABT_mutex_lock(rpt->rt_lock);
@@ -726,12 +739,14 @@ rebuild_scan_leader(void *data)
 	if (rc) {
 		D_ERROR(DF_UUID" send rebuild object list failed:%d\n",
 			DP_UUID(rpt->rt_pool_uuid), rc);
-		D_GOTO(out_map, rc);
+		D_GOTO(put_plmap, rc);
 	}
 
 	D_DEBUG(DB_REBUILD, DF_UUID" sent objects to initiator %d\n",
 		DP_UUID(rpt->rt_pool_uuid), rc);
 
+put_plmap:
+	pl_map_disconnect(rpt->rt_pool_uuid);
 out_map:
 	rebuild_pool_map_put(map);
 	dbtree_destroy(arg->rebuild_tree_hdl);

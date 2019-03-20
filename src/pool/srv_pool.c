@@ -988,7 +988,7 @@ pool_svc_step_up_cb(struct ds_rsvc *rsvc)
 
 			/* Need to update pool->sp_map. Swap with map. */
 			pool->sp_map_version = map_version;
-			rc = pl_map_update(pool->sp_uuid, map, false, true);
+			rc = pl_map_update(pool->sp_uuid, map, false);
 			if (rc != 0) {
 				svc->ps_pool = NULL;
 				ABT_rwlock_unlock(pool->sp_lock);
@@ -2297,7 +2297,7 @@ ds_pool_update_internal(uuid_t pool_uuid, struct pool_target_id_list *tgts,
 	 * new pool map with the old one in the cache.
 	 */
 	ABT_rwlock_wrlock(svc->ps_pool->sp_lock);
-	rc = pl_map_update(pool_uuid, map, false, true);
+	rc = pl_map_update(pool_uuid, map, false);
 	if (rc == 0) {
 		map_tmp = svc->ps_pool->sp_map;
 		svc->ps_pool->sp_map = map;
